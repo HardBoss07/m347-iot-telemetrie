@@ -19,11 +19,11 @@ include 'includes/header.php';
     </div>
     <div class="card">
         <h3>Gesamt Messungen</h3>
-        <h2><?= $totalLogs ?></h2>
+        <h2 id="statTotalLogs"><?= $totalLogs ?></h2>
     </div>
     <div class="card">
         <h3>Kritische Warnungen</h3>
-        <h2 style="color: var(--danger);"><?= $criticalCount ?></h2>
+        <h2 id="statCriticalCount" style="color: var(--danger);"><?= $criticalCount ?></h2>
     </div>
 </div>
 
@@ -169,6 +169,13 @@ include 'includes/header.php';
         fetch(url)
             .then(response => response.json())
             .then(data => {
+                if (data.total_logs !== undefined) {
+                    document.getElementById('statTotalLogs').innerText = data.total_logs;
+                }
+                if (data.critical_count !== undefined) {
+                    document.getElementById('statCriticalCount').innerText = data.critical_count;
+                }
+
                 // Tabelle aktualisieren
                 const tbody = document.getElementById('telemetryBody');
                 tbody.innerHTML = '';
@@ -183,13 +190,13 @@ include 'includes/header.php';
                     data.logs.forEach(log => {
                         const tr = document.createElement('tr');
                         tr.innerHTML = `
-                        <td>${log.recorded_at}</td>
-                        <td><strong>${log.device_name}</strong></td>
-                        <td>${log.location}</td>
-                        <td>${log.temperature} °C</td>
-                        <td>${log.humidity} %</td>
-                        <td><span class="badge badge-${log.status}">${log.status}</span></td>
-                    `;
+                    <td>${log.recorded_at}</td>
+                    <td><strong>${log.device_name}</strong></td>
+                    <td>${log.location}</td>
+                    <td>${log.temperature} °C</td>
+                    <td>${log.humidity} %</td>
+                    <td><span class="badge badge-${log.status}">${log.status}</span></td>
+                `;
                         tbody.appendChild(tr);
                     });
                 }
@@ -211,6 +218,13 @@ include 'includes/header.php';
                 chartInstance.update();
             });
     }
+
+    // Attach auto-polling on DOMContentLoaded
+    document.addEventListener('DOMContentLoaded', () => {
+        initChart();
+        loadDashboardData();
+        setInterval(loadDashboardData, 3000);
+    });
 
     // Event-Listener für sofortiges Suchen/Filtern
     let debounceTimer;

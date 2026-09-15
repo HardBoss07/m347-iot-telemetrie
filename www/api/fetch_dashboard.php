@@ -29,6 +29,10 @@ if (in_array($statusFilter, ['OK', 'WARNUNG', 'KRITISCH'])) {
 
 $whereSql = $whereClauses ? 'WHERE ' . implode(' AND ', $whereClauses) : '';
 
+// Summary Card Totals
+$totalLogs = (int) $pdo->query("SELECT COUNT(*) FROM telemetry_data")->fetchColumn();
+$criticalCount = (int) $pdo->query("SELECT COUNT(*) FROM telemetry_data WHERE status = 'KRITISCH'")->fetchColumn();
+
 // Count Total Filtered
 $countStmt = $pdo->prepare("SELECT COUNT(*) FROM telemetry_data t JOIN devices d ON t.device_id = d.id $whereSql");
 $countStmt->execute($params);
@@ -66,6 +70,8 @@ $chartStmt->execute($params);
 $chartRaw = array_reverse($chartStmt->fetchAll());
 
 echo json_encode([
+    'total_logs' => $totalLogs,
+    'critical_count' => $criticalCount,
     'logs' => $logs,
     'total_filtered' => $totalFilteredLogs,
     'page' => $page,

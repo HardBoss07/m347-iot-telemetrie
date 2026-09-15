@@ -11,6 +11,20 @@ services:
     networks:
       - webnetz
 
+  worker:
+    build: .
+    container_name: telemetry_worker
+    restart: unless-stopped
+    command: php /var/www/html/cron/runner.php
+    environment:
+      GENERATOR_INTERVAL: 5
+    volumes:
+      - ./www:/var/www/html
+    depends_on:
+      - mysql
+    networks:
+      - webnetz
+
   mysql:
     image: mysql:8.4
     container_name: mysql

@@ -11,6 +11,16 @@ DROP TABLE IF EXISTS telemetry_data;
 
 DROP TABLE IF EXISTS devices;
 
+DROP TABLE IF EXISTS users;
+
+CREATE TABLE
+    users (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        username VARCHAR(50) NOT NULL UNIQUE,
+        password_hash VARCHAR(255) NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
+
 CREATE TABLE
     devices (
         id INT AUTO_INCREMENT PRIMARY KEY,
@@ -30,6 +40,9 @@ CREATE TABLE
         recorded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (device_id) REFERENCES devices (id) ON DELETE CASCADE
     ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
+
+INSERT INTO users (username, password_hash)
+VALUES ('admin', '$2y$10$heuMG7aElXF5IiS4rCN49.T.smRQfhlCmVuoAh/SPpjQ6YA6qzZO6');
 
 INSERT INTO
     devices (device_name, device_type, location)

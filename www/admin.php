@@ -1,4 +1,10 @@
 <?php
+session_start();
+if (!isset($_SESSION['user_id'])) {
+    header('Location: login.php');
+    exit;
+}
+
 require_once 'config/db.php';
 require_once 'cron/mock_worker.php';
 
@@ -21,7 +27,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 include 'includes/header.php';
 ?>
 
-<h2>Admin Dashboard</h2>
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+    <h2>Admin Dashboard</h2>
+    <a href="logout.php"
+        style="background-color: #475569; color: white; padding: 8px 15px; border-radius: 4px; text-decoration: none; font-size: 0.9em;">Abmelden
+        (<?= htmlspecialchars($_SESSION['username']) ?>)</a>
+</div>
+
 <p>Hier kannst du die Datenbank zentral steuern und Testdaten simulieren.</p>
 
 <?php if ($message): ?>

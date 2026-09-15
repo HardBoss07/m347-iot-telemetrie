@@ -17,16 +17,14 @@ docker compose up -d --build
 
 ## 🔑 Zugangsdaten & Services
 
-| Service           | URL / Host                                                         | Benutzername / Server | Passwort | Beschreibung         |
-| ----------------- | ------------------------------------------------------------------ | --------------------- | -------- | -------------------- |
-| **Web Dashboard** | [http://localhost:8080](http://localhost:8080)                     | -                     | -        | Hauptanwendung / UI  |
-| **Admin Panel**   | [http://localhost:8080/admin.php](http://localhost:8080/admin.php) | -                     | -        | Testdaten generieren |
-| **phpMyAdmin**    | [http://localhost:8081](http://localhost:8081)                     | Server: `mysql`<br>   |
-
-<br>User: `meinuser` | `meinpasswort` | DB Administration |
-| **Portainer** | [https://localhost:9443](https://localhost:9443) | _(Beim 1. Aufruf festlegen)_ | - | Container Mgmt |
-| **MySQL DB** | `mysql:3306` _(intern)_ | `meinuser` | `meinpasswort` | Hauptdatenbank (`iot_telemetrie`) |
-| **MySQL Root** | `mysql:3306` _(intern)_ | `root` | `rootpasswort` | DB Superuser |
+| Service           | URL / Host                                                         | Benutzername / Server            | Passwort       | Beschreibung                      |
+| ----------------- | ------------------------------------------------------------------ | -------------------------------- | -------------- | --------------------------------- |
+| **Web Dashboard** | [http://localhost:8080](http://localhost:8080)                     | -                                | -              | Hauptanwendung / UI               |
+| **Admin Panel**   | [http://localhost:8080/admin.php](http://localhost:8080/admin.php) | admin                            | admin          | Testdaten generieren              |
+| **phpMyAdmin**    | [http://localhost:8081](http://localhost:8081)                     | Server: `mysql` User: `meinuser` | `meinpasswort` | DB Administration                 |
+| **Portainer**     | [https://localhost:9443](https://localhost:9443)                   | _(Beim 1. Aufruf festlegen)_     | -              | Container Mgmt                    |
+| **MySQL DB**      | `mysql:3306` _(intern)_                                            | `meinuser`                       | `meinpasswort` | Hauptdatenbank (`iot_telemetrie`) |
+| **MySQL Root**    | `mysql:3306` _(intern)_                                            | `root`                           | `rootpasswort` | DB Superuser                      |
 
 ## 📡 API Nutzung (Beispiel für externe IoT-Geräte)
 

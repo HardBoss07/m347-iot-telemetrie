@@ -1,13 +1,10 @@
 <?php
 require_once __DIR__ . '/../config/db.php';
 
-function generateMockData(int $count = 1): int
+function generateMockData(int $rounds = 1): int
 {
     $pdo = getDBConnection();
-
-    // Alle existierenden Geräte holen
-    $stmt = $pdo->query("SELECT id FROM devices");
-    $devices = $stmt->fetchAll(PDO::FETCH_COLUMN);
+    $devices = $pdo->query("SELECT id, device_name, device_type FROM devices")->fetchAll();
 
     if (empty($devices)) {
         return 0;
@@ -19,21 +16,46 @@ function generateMockData(int $count = 1): int
         VALUES (:device_id, :temperature, :humidity, :status)
     ");
 
-    $statuses = ['OK', 'OK', 'OK', 'OK', 'WARNUNG', 'KRITISCH'];
+    $latestStmt = $pdo->prepare("
+        SELECT temperature, humidity FROM telemetry_data 
+        WHERE device_id = :device_id 
+        ORDER BY recorded_at DESC, id DESC LIMIT 1
+    ");
 
-    for ($i = 0; $i < $count; $i++) {
-        $deviceId = $devices[array_rand($devices)];
-        $temp = round(rand(150, 450) / 10, 2); // 15.0 - 45.0 °C
-        $hum = round(rand(300, 900) / 10, 2);  // 30.0 - 90.0 %
-        $status = $statuses[array_rand($statuses)];
+    for ($r = 0; $r < $rounds; $r++) {
+        foreach ($devices as $device) {
+            $latestStmt->execute([':device_id' => $device['id']]);
+            $last = $latestStmt->fetch();
 
-        $insertStmt->execute([
-            ':device_id' => $deviceId,
-            ':temperature' => $temp,
-            ':humidity' => $hum,
-            ':status' => $status
-        ]);
-        $inserted++;
+            if ($last) {
+                // Realistische kontinuierliche Abweichung (Random Walk)
+                $tempDelta = (rand(-8, 8) / 10.0); // -0.8 bis +0.8 °C
+                $humDelta = (rand(-15, 15) / 10.0); // -1.5 bis +1.5 %
+
+                $temp = round(max(5.0, min(50.0, (float) $last['temperature'] + $tempDelta)), 2);
+                $hum = round(max(10.0, min(95.0, (float) $last['humidity'] + $humDelta)), 2);
+            } else {
+                // Basiswerte je nach Gerätetyp
+                $temp = 22.0 + (rand(-20, 20) / 10.0);
+                $hum = 45.0 + (rand(-40, 40) / 10.0);
+            }
+
+            // Statusbestimmung nach Schwellenwerten
+            $status = 'OK';
+            if ($temp > 35.0 || $temp < 10.0 || $hum > 80.0 || $hum < 20.0) {
+                $status = 'KRITISCH';
+            } elseif ($temp > 28.0 || $temp < 15.0 || $hum > 65.0 || $hum < 30.0) {
+                $status = 'WARNUNG';
+            }
+
+            $insertStmt->execute([
+                ':device_id' => $device['id'],
+                ':temperature' => $temp,
+                ':humidity' => $hum,
+                ':status' => $status
+            ]);
+            $inserted++;
+        }
     }
 
     return $inserted;

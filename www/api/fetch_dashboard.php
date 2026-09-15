@@ -6,6 +6,7 @@ $pdo = getDBConnection();
 
 $search = trim($_GET['search'] ?? '');
 $deviceFilter = (int) ($_GET['device_id'] ?? 0);
+$locationFilter = trim($_GET['location'] ?? '');
 $statusFilter = trim($_GET['status'] ?? '');
 $page = max(1, (int) ($_GET['page'] ?? 1));
 $limit = 10;
@@ -22,6 +23,10 @@ if ($deviceFilter > 0) {
     $whereClauses[] = "t.device_id = :device_id";
     $params[':device_id'] = $deviceFilter;
 }
+if ($locationFilter !== '') {
+    $whereClauses[] = "d.location = :location";
+    $params[':location'] = $locationFilter;
+}
 if (in_array($statusFilter, ['OK', 'WARNUNG', 'KRITISCH'])) {
     $whereClauses[] = "t.status = :status";
     $params[':status'] = $statusFilter;
@@ -29,9 +34,12 @@ if (in_array($statusFilter, ['OK', 'WARNUNG', 'KRITISCH'])) {
 
 $whereSql = $whereClauses ? 'WHERE ' . implode(' AND ', $whereClauses) : '';
 
-// Summary Card Totals
 $totalLogs = (int) $pdo->query("SELECT COUNT(*) FROM telemetry_data")->fetchColumn();
 $criticalCount = (int) $pdo->query("SELECT COUNT(*) FROM telemetry_data WHERE status = 'KRITISCH'")->fetchColumn();
+
+// Verfügbare Standorte & Geräte für Filter holen
+$allDevices = $pdo->query("SELECT id, device_name, location FROM devices ORDER BY device_name ASC")->fetchAll();
+$locations = array_values(array_unique(array_column($allDevices, 'location')));
 
 // Count Total Filtered
 $countStmt = $pdo->prepare("SELECT COUNT(*) FROM telemetry_data t JOIN devices d ON t.device_id = d.id $whereSql");
@@ -57,29 +65,41 @@ $logStmt->bindValue(':offset', $offset, PDO::PARAM_INT);
 $logStmt->execute();
 $logs = $logStmt->fetchAll();
 
-// Fetch Chart Data (letzte 15 Einträge)
-$chartStmt = $pdo->prepare("
-    SELECT t.temperature, t.humidity, DATE_FORMAT(t.recorded_at, '%H:%i:%s') as time_label, d.device_name
-    FROM telemetry_data t
-    JOIN devices d ON t.device_id = d.id
-    $whereSql
-    ORDER BY t.recorded_at DESC 
-    LIMIT 15
-");
-$chartStmt->execute($params);
-$chartRaw = array_reverse($chartStmt->fetchAll());
+// Diagrammdaten pro Gerät aufbereiten
+$deviceCharts = [];
+foreach ($allDevices as $dev) {
+    if ($deviceFilter > 0 && $dev['id'] !== $deviceFilter)
+        continue;
+    if ($locationFilter !== '' && $dev['location'] !== $locationFilter)
+        continue;
+
+    $cStmt = $pdo->prepare("
+        SELECT t.temperature, t.humidity, DATE_FORMAT(t.recorded_at, '%H:%i:%s') as time_label
+        FROM telemetry_data t
+        WHERE t.device_id = :dev_id
+        ORDER BY t.recorded_at DESC LIMIT 15
+    ");
+    $cStmt->execute([':dev_id' => $dev['id']]);
+    $raw = array_reverse($cStmt->fetchAll());
+
+    $deviceCharts[] = [
+        'id' => $dev['id'],
+        'name' => $dev['device_name'],
+        'location' => $dev['location'],
+        'labels' => array_column($raw, 'time_label'),
+        'temperatures' => array_column($raw, 'temperature'),
+        'humidities' => array_column($raw, 'humidity')
+    ];
+}
 
 echo json_encode([
     'total_logs' => $totalLogs,
     'critical_count' => $criticalCount,
+    'locations' => $locations,
+    'devices' => $allDevices,
     'logs' => $logs,
     'total_filtered' => $totalFilteredLogs,
     'page' => $page,
     'total_pages' => $totalPages,
-    'chart' => [
-        'labels' => array_column($chartRaw, 'time_label'),
-        'temperatures' => array_column($chartRaw, 'temperature'),
-        'humidities' => array_column($chartRaw, 'humidity'),
-        'device_names' => array_column($chartRaw, 'device_name')
-    ]
+    'charts' => $deviceCharts
 ], JSON_UNESCAPED_UNICODE);

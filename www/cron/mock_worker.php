@@ -4,7 +4,7 @@ require_once __DIR__ . '/../config/db.php';
 function generateMockData(int $rounds = 1): int
 {
     $pdo = getDBConnection();
-    $devices = $pdo->query("SELECT id, device_name, device_type FROM devices")->fetchAll();
+    $devices = $pdo->query("SELECT id, device_name, threshold_config FROM devices")->fetchAll();
 
     if (empty($devices)) {
         return 0;
@@ -12,47 +12,53 @@ function generateMockData(int $rounds = 1): int
 
     $inserted = 0;
     $insertStmt = $pdo->prepare("
-        INSERT INTO telemetry_data (device_id, temperature, humidity, status) 
-        VALUES (:device_id, :temperature, :humidity, :status)
+        INSERT INTO telemetry_data (device_id, metrics, status) 
+        VALUES (:device_id, :metrics, :status)
     ");
 
     $latestStmt = $pdo->prepare("
-        SELECT temperature, humidity FROM telemetry_data 
+        SELECT metrics FROM telemetry_data 
         WHERE device_id = :device_id 
         ORDER BY recorded_at DESC, id DESC LIMIT 1
     ");
 
     for ($r = 0; $r < $rounds; $r++) {
         foreach ($devices as $device) {
-            $latestStmt->execute([':device_id' => $device['id']]);
-            $last = $latestStmt->fetch();
-
-            if ($last) {
-                // Realistische kontinuierliche Abweichung (Random Walk)
-                $tempDelta = (rand(-8, 8) / 10.0); // -0.8 bis +0.8 °C
-                $humDelta = (rand(-15, 15) / 10.0); // -1.5 bis +1.5 %
-
-                $temp = round(max(5.0, min(50.0, (float) $last['temperature'] + $tempDelta)), 2);
-                $hum = round(max(10.0, min(95.0, (float) $last['humidity'] + $humDelta)), 2);
-            } else {
-                // Basiswerte je nach Gerätetyp
-                $temp = 22.0 + (rand(-20, 20) / 10.0);
-                $hum = 45.0 + (rand(-40, 40) / 10.0);
+            $thresholdConfig = json_decode($device['threshold_config'] ?? '{}', true);
+            if (empty($thresholdConfig)) {
+                continue;
             }
 
-            // Statusbestimmung nach Schwellenwerten
-            $status = 'OK';
-            if ($temp > 35.0 || $temp < 10.0 || $hum > 80.0 || $hum < 20.0) {
-                $status = 'KRITISCH';
-            } elseif ($temp > 28.0 || $temp < 15.0 || $hum > 65.0 || $hum < 30.0) {
-                $status = 'WARNUNG';
+            $latestStmt->execute([':device_id' => $device['id']]);
+            $lastRow = $latestStmt->fetch();
+            $lastMetrics = $lastRow ? json_decode($lastRow['metrics'], true) : [];
+
+            $newMetrics = [];
+            $evaluatedStatus = 'OK';
+
+            foreach ($thresholdConfig as $metricKey => $cfg) {
+                $targetMid = (($cfg['min_ok'] ?? 20.0) + ($cfg['max_ok'] ?? 25.0)) / 2.0;
+                $lastVal = $lastMetrics[$metricKey] ?? $targetMid;
+
+                // Random walk drift with slight gravitational pull back to center target
+                $drift = (rand(-10, 10) / 10.0);
+                $pull = ($targetMid - $lastVal) * 0.05;
+                $newVal = round($lastVal + $drift + $pull, 2);
+
+                $newMetrics[$metricKey] = $newVal;
+
+                // Status check
+                if ((isset($cfg['min_warn']) && $newVal < $cfg['min_warn']) || (isset($cfg['max_warn']) && $newVal > $cfg['max_warn'])) {
+                    $evaluatedStatus = 'KRITISCH';
+                } elseif ($evaluatedStatus !== 'KRITISCH' && ((isset($cfg['min_ok']) && $newVal < $cfg['min_ok']) || (isset($cfg['max_ok']) && $newVal > $cfg['max_ok']))) {
+                    $evaluatedStatus = 'WARNUNG';
+                }
             }
 
             $insertStmt->execute([
                 ':device_id' => $device['id'],
-                ':temperature' => $temp,
-                ':humidity' => $hum,
-                ':status' => $status
+                ':metrics' => json_encode($newMetrics, JSON_UNESCAPED_UNICODE),
+                ':status' => $evaluatedStatus
             ]);
             $inserted++;
         }

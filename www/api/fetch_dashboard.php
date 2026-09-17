@@ -37,19 +37,16 @@ $whereSql = $whereClauses ? 'WHERE ' . implode(' AND ', $whereClauses) : '';
 $totalLogs = (int) $pdo->query("SELECT COUNT(*) FROM telemetry_data")->fetchColumn();
 $criticalCount = (int) $pdo->query("SELECT COUNT(*) FROM telemetry_data WHERE status = 'KRITISCH'")->fetchColumn();
 
-// Verfügbare Standorte & Geräte für Filter holen
-$allDevices = $pdo->query("SELECT id, device_name, location FROM devices ORDER BY device_name ASC")->fetchAll();
+$allDevices = $pdo->query("SELECT id, device_name, location, threshold_config FROM devices ORDER BY device_name ASC")->fetchAll();
 $locations = array_values(array_unique(array_column($allDevices, 'location')));
 
-// Count Total Filtered
 $countStmt = $pdo->prepare("SELECT COUNT(*) FROM telemetry_data t JOIN devices d ON t.device_id = d.id $whereSql");
 $countStmt->execute($params);
 $totalFilteredLogs = (int) $countStmt->fetchColumn();
-$totalPages = ceil($totalFilteredLogs / $limit);
+$totalPages = (int) ceil($totalFilteredLogs / $limit);
 
-// Fetch Table Data
 $logStmt = $pdo->prepare("
-    SELECT t.recorded_at, t.temperature, t.humidity, t.status, d.device_name, d.location 
+    SELECT t.id, t.device_id, t.recorded_at, t.metrics, t.status, d.device_name, d.location 
     FROM telemetry_data t 
     JOIN devices d ON t.device_id = d.id 
     $whereSql 
@@ -63,9 +60,13 @@ foreach ($params as $key => $val) {
 $logStmt->bindValue(':limit', $limit, PDO::PARAM_INT);
 $logStmt->bindValue(':offset', $offset, PDO::PARAM_INT);
 $logStmt->execute();
-$logs = $logStmt->fetchAll();
+$rawLogs = $logStmt->fetchAll();
 
-// Diagrammdaten pro Gerät aufbereiten
+$logs = array_map(function ($l) {
+    $l['metrics_decoded'] = json_decode($l['metrics'], true);
+    return $l;
+}, $rawLogs);
+
 $deviceCharts = [];
 foreach ($allDevices as $dev) {
     if ($deviceFilter > 0 && $dev['id'] !== $deviceFilter)
@@ -74,7 +75,7 @@ foreach ($allDevices as $dev) {
         continue;
 
     $cStmt = $pdo->prepare("
-        SELECT t.temperature, t.humidity, DATE_FORMAT(t.recorded_at, '%H:%i:%s') as time_label
+        SELECT t.metrics, DATE_FORMAT(t.recorded_at, '%H:%i:%s') as time_label
         FROM telemetry_data t
         WHERE t.device_id = :dev_id
         ORDER BY t.recorded_at DESC LIMIT 15
@@ -82,13 +83,22 @@ foreach ($allDevices as $dev) {
     $cStmt->execute([':dev_id' => $dev['id']]);
     $raw = array_reverse($cStmt->fetchAll());
 
+    $labels = array_column($raw, 'time_label');
+    $series = [];
+
+    foreach ($raw as $row) {
+        $m = json_decode($row['metrics'], true) ?? [];
+        foreach ($m as $k => $v) {
+            $series[$k][] = $v;
+        }
+    }
+
     $deviceCharts[] = [
         'id' => $dev['id'],
         'name' => $dev['device_name'],
         'location' => $dev['location'],
-        'labels' => array_column($raw, 'time_label'),
-        'temperatures' => array_column($raw, 'temperature'),
-        'humidities' => array_column($raw, 'humidity')
+        'labels' => $labels,
+        'series' => $series
     ];
 }
 

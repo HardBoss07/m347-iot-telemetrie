@@ -28,19 +28,17 @@ include 'includes/header.php';
     </div>
 </div>
 
-<div class="card" style="margin-bottom: 25px;">
+<div class="card mb-4">
     <h3>Messdaten filtern und suchen</h3>
-    <div style="display: flex; gap: 15px; flex-wrap: wrap; align-items: flex-end;">
+    <div class="flex-wrap-end">
         <div style="flex: 1; min-width: 180px;">
-            <label for="search" style="font-size: 0.9em; color: #94a3b8;">Suchbegriff:</label>
-            <input type="text" id="search" placeholder="Name..."
-                style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid var(--border-color); background: #0f172a; color: #fff; margin-top: 5px;">
+            <label for="search">Suchbegriff:</label>
+            <input type="text" id="search" class="form-control" placeholder="Name...">
         </div>
 
         <div style="flex: 1; min-width: 150px;">
-            <label for="location" style="font-size: 0.9em; color: #94a3b8;">Raum / Standort:</label>
-            <select id="location"
-                style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid var(--border-color); background: #0f172a; color: #fff; margin-top: 5px;">
+            <label for="location">Raum / Standort:</label>
+            <select id="location" class="form-select">
                 <option value="">Alle Räume</option>
                 <?php foreach ($locations as $loc): ?>
                     <option value="<?= htmlspecialchars($loc) ?>"><?= htmlspecialchars($loc) ?></option>
@@ -49,9 +47,8 @@ include 'includes/header.php';
         </div>
 
         <div style="flex: 1; min-width: 150px;">
-            <label for="device_id" style="font-size: 0.9em; color: #94a3b8;">Gerät:</label>
-            <select id="device_id"
-                style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid var(--border-color); background: #0f172a; color: #fff; margin-top: 5px;">
+            <label for="device_id">Gerät:</label>
+            <select id="device_id" class="form-select">
                 <option value="0">Alle Geräte</option>
                 <?php foreach ($devices as $d): ?>
                     <option value="<?= $d['id'] ?>"><?= htmlspecialchars($d['device_name']) ?></option>
@@ -60,9 +57,8 @@ include 'includes/header.php';
         </div>
 
         <div style="flex: 1; min-width: 130px;">
-            <label for="status" style="font-size: 0.9em; color: #94a3b8;">Status:</label>
-            <select id="status"
-                style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid var(--border-color); background: #0f172a; color: #fff; margin-top: 5px;">
+            <label for="status">Status:</label>
+            <select id="status" class="form-select">
                 <option value="">Alle</option>
                 <option value="OK">OK</option>
                 <option value="WARNUNG">WARNUNG</option>
@@ -70,14 +66,14 @@ include 'includes/header.php';
             </select>
         </div>
 
-        <div>
-            <button id="resetBtn" style="background: #475569; color: #fff;">Zurücksetzen</button>
+        <div class="flex-gap-2">
+            <button id="resetBtn" class="btn btn-secondary">Zurücksetzen</button>
         </div>
     </div>
 </div>
 
-<h3 style="margin-bottom: 15px;">Geräte-Telemetrie Verläufe</h3>
-<div id="chartsContainer" class="card-grid" style="margin-bottom: 25px;"></div>
+<h3 class="mb-3">Geräte-Telemetrie Verläufe</h3>
+<div id="chartsContainer" class="card-grid mb-4"></div>
 
 <h2>Telemetrie-Protokoll (<span id="totalRecords">0</span> Einträge)</h2>
 
@@ -88,8 +84,7 @@ include 'includes/header.php';
                 <th>Zeitstempel</th>
                 <th>Gerät</th>
                 <th>Standort</th>
-                <th>Temperatur</th>
-                <th>Luftfeuchtigkeit</th>
+                <th>Messwerte</th>
                 <th>Status</th>
             </tr>
         </thead>
@@ -97,18 +92,34 @@ include 'includes/header.php';
     </table>
 </div>
 
-<div id="paginationNav" style="display: flex; justify-content: space-between; align-items: center; margin-top: 20px;">
-    <span style="color: #94a3b8; font-size: 0.9em;">Seite <span id="currentPage">1</span> von <span
-            id="totalPages">1</span></span>
-    <div style="display: flex; gap: 5px;">
-        <button id="prevBtn" class="btn" style="padding: 6px 12px; font-size: 0.9em;">Zurück</button>
-        <button id="nextBtn" class="btn" style="padding: 6px 12px; font-size: 0.9em;">Weiter</button>
+<div id="paginationNav" class="flex-between mt-3">
+    <span class="text-muted">Seite <span id="currentPage">1</span> von <span id="totalPages">1</span></span>
+    <div class="flex-gap-2">
+        <button id="prevBtn" class="btn btn-sm">Zurück</button>
+        <button id="nextBtn" class="btn btn-sm">Weiter</button>
     </div>
 </div>
 
 <script>
     let currentPage = 1;
     let chartInstances = {};
+    let currentFetchedLogs = [];
+
+    const translations = {
+        temperature: 'Temperatur',
+        humidity: 'Feuchtigkeit',
+        voltage: 'Spannung',
+        co2: 'CO2',
+        pressure: 'Druck'
+    };
+
+    const units = {
+        temperature: '°C',
+        humidity: '%',
+        voltage: 'V',
+        co2: 'ppm',
+        pressure: 'hPa'
+    };
 
     const searchInput = document.getElementById('search');
     const locationSelect = document.getElementById('location');
@@ -118,11 +129,12 @@ include 'includes/header.php';
     const prevBtn = document.getElementById('prevBtn');
     const nextBtn = document.getElementById('nextBtn');
 
+    const palette = ['#38bdf8', '#10b981', '#f59e0b', '#ec4899', '#8b5cf6'];
+
     function renderOrUpdateCharts(chartsData) {
         const container = document.getElementById('chartsContainer');
         const activeIds = chartsData.map(c => c.id);
 
-        // Entferne nicht mehr zutreffende Diagramme
         Object.keys(chartInstances).forEach(id => {
             if (!activeIds.includes(parseInt(id))) {
                 chartInstances[id].destroy();
@@ -139,23 +151,34 @@ include 'includes/header.php';
                 card.className = 'card';
                 card.id = `chart-card-${chart.id}`;
                 card.innerHTML = `
-                    <h4 style="margin: 0 0 10px 0; color: var(--accent-color);">${chart.name} <span style="font-size:0.8em; color:#94a3b8;">(${chart.location})</span></h4>
-                    <div style="height: 220px; position: relative;">
+                    <div class="flex-between mb-2">
+                        <h4 style="margin: 0; color: var(--accent-color);">${chart.name} <span class="text-muted">(${chart.location})</span></h4>
+                        <a href="sensor.php?id=${chart.id}" style="color: var(--accent-color); font-size: 0.8em; text-decoration: none;">Details &rarr;</a>
+                    </div>
+                    <div class="chart-box">
                         <canvas id="canvas-${chart.id}"></canvas>
                     </div>
                 `;
                 container.appendChild(card);
 
+                const datasets = [];
+                let colorIndex = 0;
+                for (const [metricKey, values] of Object.entries(chart.series || {})) {
+                    const labelName = (translations[metricKey] || metricKey) + (units[metricKey] ? ` (${units[metricKey]})` : '');
+                    datasets.push({
+                        label: labelName,
+                        data: values,
+                        borderColor: palette[colorIndex % palette.length],
+                        fill: false,
+                        tension: 0.2
+                    });
+                    colorIndex++;
+                }
+
                 const ctx = document.getElementById(`canvas-${chart.id}`).getContext('2d');
                 chartInstances[chart.id] = new Chart(ctx, {
                     type: 'line',
-                    data: {
-                        labels: chart.labels,
-                        datasets: [
-                            { label: 'Temperatur (°C)', data: chart.temperatures, borderColor: '#38bdf8', fill: false, tension: 0.2 },
-                            { label: 'Feuchtigkeit (%)', data: chart.humidities, borderColor: '#10b981', fill: false, tension: 0.2 }
-                        ]
-                    },
+                    data: { labels: chart.labels, datasets: datasets },
                     options: {
                         responsive: true,
                         maintainAspectRatio: false,
@@ -169,8 +192,20 @@ include 'includes/header.php';
             } else {
                 const inst = chartInstances[chart.id];
                 inst.data.labels = chart.labels;
-                inst.data.datasets[0].data = chart.temperatures;
-                inst.data.datasets[1].data = chart.humidities;
+                const datasets = [];
+                let colorIndex = 0;
+                for (const [metricKey, values] of Object.entries(chart.series || {})) {
+                    const labelName = (translations[metricKey] || metricKey) + (units[metricKey] ? ` (${units[metricKey]})` : '');
+                    datasets.push({
+                        label: labelName,
+                        data: values,
+                        borderColor: palette[colorIndex % palette.length],
+                        fill: false,
+                        tension: 0.2
+                    });
+                    colorIndex++;
+                }
+                inst.data.datasets = datasets;
                 inst.update();
             }
         });
@@ -187,6 +222,7 @@ include 'includes/header.php';
         fetch(url)
             .then(res => res.json())
             .then(data => {
+                currentFetchedLogs = data.logs || [];
                 document.getElementById('statTotalLogs').innerText = data.total_logs;
                 document.getElementById('statCriticalCount').innerText = data.critical_count;
                 document.getElementById('totalRecords').innerText = data.total_filtered;
@@ -196,17 +232,24 @@ include 'includes/header.php';
                 const tbody = document.getElementById('telemetryBody');
                 tbody.innerHTML = '';
 
-                if (data.logs.length === 0) {
-                    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;">Keine Datensätze gefunden.</td></tr>';
+                if (currentFetchedLogs.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;">Keine Datensätze gefunden.</td></tr>';
                 } else {
-                    data.logs.forEach(log => {
+                    currentFetchedLogs.forEach(log => {
                         const tr = document.createElement('tr');
+                        const metricsFormatted = Object.entries(log.metrics_decoded || {})
+                            .map(([k, v]) => {
+                                const translated = translations[k] || k;
+                                const unitStr = units[k] ? ` ${units[k]}` : '';
+                                return `<span class="metric-pill"><strong>${translated}:</strong> ${v}${unitStr}</span>`;
+                            })
+                            .join(' ');
+
                         tr.innerHTML = `
                             <td>${log.recorded_at}</td>
-                            <td><strong>${log.device_name}</strong></td>
+                            <td><a href="sensor.php?id=${log.device_id}" style="color: var(--accent-color); font-weight: bold; text-decoration: none;">${log.device_name}</a></td>
                             <td>${log.location}</td>
-                            <td>${log.temperature} °C</td>
-                            <td>${log.humidity} %</td>
+                            <td>${metricsFormatted || '<em>Keine Werte</em>'}</td>
                             <td><span class="badge badge-${log.status}">${log.status}</span></td>
                         `;
                         tbody.appendChild(tr);

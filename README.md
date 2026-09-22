@@ -61,4 +61,4 @@ Werte und Status werden zusammen in `telemetry_data` gespeichert.
 - **Nicolas** – Testing & Dokumetation
 - **Jay** – Datenbank
 - **Andrin** – Forntend & Dashboard
-- **HardBoss07** – Entwicklung
+- **Matteo** – Entwicklung

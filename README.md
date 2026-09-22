@@ -40,3 +40,25 @@ curl -X POST http://localhost:8080/api/log.php \
     "status": "OK"
   }'
 ```
+
+## Simulation der Messdaten
+
+Da keine echte Sensor-Hardware zur Verfügung steht, werden alle Messwerte simuliert.
+
+Die Funktion `generateMockData()` erzeugt für jedes Gerät neue Messwerte per **Random Walk**: der neue Wert driftet zufällig vom letzten Wert weg, wird aber leicht Richtung Zielwert (Mitte von `min_ok`/`max_ok`) gezogen – so bleiben die Werte realistisch statt komplett zufällig.
+
+Pro Messwert wird zudem der Status bewertet:
+| Status     | Bedingung                                                          |
+| ---------- | ------------------------------------------------------------------ |
+| `OK`       | innerhalb von `min_ok` / `max_ok`                                  |
+| `WARNUNG`  | ausserhalb `min_ok`/`max_ok`, aber innerhalb `min_warn`/`max_warn` |
+| `KRITISCH` | ausserhalb `min_warn` / `max_warn`                                 |
+
+Werte und Status werden zusammen in `telemetry_data` gespeichert.
+
+## Team
+
+- **Nicolas** – Testing & Dokumetation
+- **Jay** – Datenbank
+- **Andrin** – Forntend & Dashboard
+- **HardBoss07** – Entwicklung

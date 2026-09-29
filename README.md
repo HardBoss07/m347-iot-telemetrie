@@ -515,13 +515,13 @@ Das Frontend ist ohne schwere Frameworks mit nativem JavaScript (ES6+), Chart.js
 
 ### Code-Änderungen übernehmen & Datenbank zurücksetzen
 
-| Situation                                      | Befehl                                               |
-| ---------------------------------------------- | ---------------------------------------------------- |
-| Neuen Stand von GitHub holen                   | `git pull`                                           |
-| PHP-Seiten geändert (`index.php`, `api/` usw.) | Kein Neustart nötig (Ordner `www` ist gemountet)     |
-| Worker-Code geändert (`cron/`)                 | `docker compose restart worker`                      |
-| `Dockerfile` oder `docker-compose.yml` geändert | `docker compose up -d --build`                       |
-| `schema.sql` geändert / DB komplett neu        | `docker compose down -v` und danach `docker compose up -d --build` (**löscht alle Messdaten**) |
+| Situation                                       | Befehl                                                                                         |
+| ----------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| Neuen Stand von GitHub holen                    | `git pull`                                                                                     |
+| PHP-Seiten geändert (`index.php`, `api/` usw.)  | Kein Neustart nötig (Ordner `www` ist gemountet)                                               |
+| Worker-Code geändert (`cron/`)                  | `docker compose restart worker`                                                                |
+| `Dockerfile` oder `docker-compose.yml` geändert | `docker compose up -d --build`                                                                 |
+| `schema.sql` geändert / DB komplett neu         | `docker compose down -v` und danach `docker compose up -d --build` (**löscht alle Messdaten**) |
 
 ## Service-Übersicht & Zugangsdaten
 

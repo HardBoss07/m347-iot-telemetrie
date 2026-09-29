@@ -191,7 +191,7 @@ Speichert alle registrierten IoT-Sensoren sowie deren individuellem Schwellenwer
 - `device_type` (VARCHAR(50))
 - `location` (VARCHAR(100))
 - `api_token` (VARCHAR(64), Unique Bearer Key)
-- `threshold_config` (JSON) – Beispielstruktur:
+- `threshold_config` (JSON) - Beispielstruktur:
   ```json
   {
     "temperature": {
@@ -217,7 +217,7 @@ Nimmt die eigentlichen Zeitreihen-Messdaten auf.
 
 - `id` (BIGINT, Primary Key, Auto Increment)
 - `device_id` (INT, Foreign Key auf `devices.id` mit Cascading Delete)
-- `metrics` (JSON) – Beispiel: `{"temperature": 4.2, "humidity": 52.1}`
+- `metrics` (JSON) - Beispiel: `{"temperature": 4.2, "humidity": 52.1}`
 - `status` (ENUM: `'OK'`, `'WARNUNG'`, `'KRITISCH'`)
 - `recorded_at` (TIMESTAMP, Indexierte Zeitreihe)
 
@@ -317,7 +317,7 @@ Statt reine Zufallswerte im Bereich Min-Max zu würfeln, berechnet der Worker de
 3. **Rückzugskraft zur Mitte (Tendenz)**: $P = (M - V_{alt}) \cdot 0.05$
 4. **Neuer Messwert**: $V_{neu} = \text{round}(V_{alt} + D + P, 2)$
 
-Durch die Rückzugskraft $P$ driftet der Sensor natürlich um den Sollwert herum und erzeugt sporadisch – aber realistisch – Warnungen oder kritische Spitzen, ohne unkontrolliert ins Unendliche abzuweichen.
+Durch die Rückzugskraft $P$ driftet der Sensor natürlich um den Sollwert herum und erzeugt sporadisch - aber realistisch - Warnungen oder kritische Spitzen, ohne unkontrolliert ins Unendliche abzuweichen.
 
 ## REST-API Spezifikation
 
@@ -498,7 +498,7 @@ Das Frontend ist ohne schwere Frameworks mit nativen JavaScript (ES6+), Chart.js
 
 Dieses Projekt wurde im Rahmen des ICT Moduls 347 entwickelt von:
 
-- **Nicolas** – Testing & Dokumentation
-- **Jay** – Datenbankarchitektur & Schema-Design
-- **Andrin** – Frontend, Dashboard & Visualisierung
-- **Matteo** – Core-Entwicklung, API & Container-Orchestrierung
+- **Nicolas** - Testing & Dokumentation
+- **Jay** - Datenbankarchitektur & Schema-Design
+- **Andrin** - Frontend, Dashboard & Visualisierung
+- **Matteo** - Core-Entwicklung, API & Container-Orchestrierung

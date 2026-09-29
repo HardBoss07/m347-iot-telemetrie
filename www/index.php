@@ -2,6 +2,8 @@
 require_once 'config/db.php';
 $pdo = getDBConnection();
 
+$refreshIntervalMs = ((int) (getenv('GENERATOR_INTERVAL') ?: 5)) * 1000;
+
 $devices = $pdo->query("SELECT * FROM devices ORDER BY device_name ASC")->fetchAll();
 $locations = $pdo->query("SELECT DISTINCT location FROM devices ORDER BY location ASC")->fetchAll(PDO::FETCH_COLUMN);
 $totalDevices = count($devices);
@@ -101,6 +103,7 @@ include 'includes/header.php';
 </div>
 
 <script>
+    const refreshInterval = <?= $refreshIntervalMs ?>;
     let currentPage = 1;
     let chartInstances = {};
     let currentFetchedLogs = [];
@@ -146,13 +149,17 @@ include 'includes/header.php';
 
         chartsData.forEach(chart => {
             let card = document.getElementById(`chart-card-${chart.id}`);
+            const pauseBadge = chart.is_paused
+                ? '<span class="badge" style="background-color: #f59e0b; color: #000; font-size: 0.75em; margin-left: 6px;">PAUSIERT</span>'
+                : '';
+
             if (!card) {
                 card = document.createElement('div');
                 card.className = 'card';
                 card.id = `chart-card-${chart.id}`;
                 card.innerHTML = `
                     <div class="flex-between mb-2">
-                        <h4 style="margin: 0; color: var(--accent-color);">${chart.name} <span class="text-muted">(${chart.location})</span></h4>
+                        <h4 style="margin: 0; color: var(--accent-color);">${chart.name} ${pauseBadge} <span class="text-muted">(${chart.location})</span></h4>
                         <a href="sensor.php?id=${chart.id}" style="color: var(--accent-color); font-size: 0.8em; text-decoration: none;">Details &rarr;</a>
                     </div>
                     <div class="chart-box">
@@ -182,6 +189,7 @@ include 'includes/header.php';
                     options: {
                         responsive: true,
                         maintainAspectRatio: false,
+                        animation: chart.is_paused ? false : { duration: 300 },
                         plugins: { legend: { labels: { color: '#f8fafc', font: { size: 10 } } } },
                         scales: {
                             x: { ticks: { color: '#94a3b8', font: { size: 9 } }, grid: { color: '#334155' } },
@@ -189,8 +197,34 @@ include 'includes/header.php';
                         }
                     }
                 });
+
+                const chartBox = card.querySelector('.chart-box');
+                if (chartBox) {
+                    chartBox.style.opacity = chart.is_paused ? '0.5' : '1';
+                    chartBox.style.filter = chart.is_paused ? 'grayscale(0.8)' : 'none';
+                }
             } else {
+                const headerTitle = card.querySelector('h4');
+                if (headerTitle) {
+                    headerTitle.innerHTML = `${chart.name} ${pauseBadge} <span class="text-muted">(${chart.location})</span>`;
+                }
+
+                const chartBox = card.querySelector('.chart-box');
+                if (chartBox) {
+                    chartBox.style.opacity = chart.is_paused ? '0.5' : '1';
+                    chartBox.style.filter = chart.is_paused ? 'grayscale(0.8)' : 'none';
+                }
+
                 const inst = chartInstances[chart.id];
+
+                // Unveränderte Daten bei pausierten Sensoren nicht erneut rendern
+                const currentLabelsJson = JSON.stringify(inst.data.labels);
+                const newLabelsJson = JSON.stringify(chart.labels);
+
+                if (chart.is_paused && currentLabelsJson === newLabelsJson) {
+                    return;
+                }
+
                 inst.data.labels = chart.labels;
                 const datasets = [];
                 let colorIndex = 0;
@@ -206,7 +240,12 @@ include 'includes/header.php';
                     colorIndex++;
                 }
                 inst.data.datasets = datasets;
-                inst.update();
+
+                if (chart.is_paused) {
+                    inst.update('none');
+                } else {
+                    inst.update();
+                }
             }
         });
     }
@@ -289,7 +328,7 @@ include 'includes/header.php';
 
     document.addEventListener('DOMContentLoaded', () => {
         loadDashboardData();
-        setInterval(loadDashboardData, 3000);
+        setInterval(loadDashboardData, refreshInterval);
     });
 </script>
 

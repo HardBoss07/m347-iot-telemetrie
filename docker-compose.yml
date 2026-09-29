@@ -18,10 +18,12 @@ services:
     command: php /var/www/html/cron/runner.php
     environment:
       GENERATOR_INTERVAL: 5
+      API_URL: http://web/api/log.php
     volumes:
       - ./www:/var/www/html
     depends_on:
       - mysql
+      - web
     networks:
       - webnetz
 

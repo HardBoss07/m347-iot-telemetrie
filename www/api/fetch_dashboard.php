@@ -37,7 +37,7 @@ $whereSql = $whereClauses ? 'WHERE ' . implode(' AND ', $whereClauses) : '';
 $totalLogs = (int) $pdo->query("SELECT COUNT(*) FROM telemetry_data")->fetchColumn();
 $criticalCount = (int) $pdo->query("SELECT COUNT(*) FROM telemetry_data WHERE status = 'KRITISCH'")->fetchColumn();
 
-$allDevices = $pdo->query("SELECT id, device_name, location, threshold_config FROM devices ORDER BY device_name ASC")->fetchAll();
+$allDevices = $pdo->query("SELECT id, device_name, location, threshold_config, is_paused FROM devices ORDER BY device_name ASC")->fetchAll();
 $locations = array_values(array_unique(array_column($allDevices, 'location')));
 
 $countStmt = $pdo->prepare("SELECT COUNT(*) FROM telemetry_data t JOIN devices d ON t.device_id = d.id $whereSql");
@@ -94,9 +94,10 @@ foreach ($allDevices as $dev) {
     }
 
     $deviceCharts[] = [
-        'id' => $dev['id'],
+        'id' => (int) $dev['id'],
         'name' => $dev['device_name'],
         'location' => $dev['location'],
+        'is_paused' => (bool) $dev['is_paused'],
         'labels' => $labels,
         'series' => $series
     ];

@@ -2,6 +2,8 @@
 require_once 'config/db.php';
 $pdo = getDBConnection();
 
+$refreshIntervalMs = ((int) (getenv('GENERATOR_INTERVAL') ?: 5)) * 1000;
+
 $deviceId = (int) ($_GET['id'] ?? 0);
 if ($deviceId <= 0) {
     header('Location: index.php');
@@ -41,7 +43,14 @@ include 'includes/header.php';
 
 <div class="flex-between mb-3">
     <div>
-        <h2 style="margin: 0;"><?= htmlspecialchars($device['device_name']) ?></h2>
+        <h2 style="margin: 0; display: inline-flex; align-items: center; gap: 8px;">
+            <?= htmlspecialchars($device['device_name']) ?>
+            <?php if (!empty($device['is_paused'])): ?>
+                <span class="badge"
+                    style="background-color: #f59e0b; color: #000; font-size: 0.5em; vertical-align: middle;">PAUSIERT</span>
+            <?php endif; ?>
+        </h2>
+        <br>
         <span class="text-muted"><?= htmlspecialchars($device['device_type']) ?> : Standort:
             <?= htmlspecialchars($device['location']) ?></span>
     </div>
@@ -101,6 +110,7 @@ include 'includes/header.php';
 </div>
 
 <script>
+    const refreshInterval = <?= $refreshIntervalMs ?>;
     const deviceId = <?= $deviceId ?>;
     let chartInstance = null;
     let currentRawLogs = [];
@@ -158,6 +168,12 @@ include 'includes/header.php';
                 // Update Chart
                 const chartData = data.charts && data.charts.length > 0 ? data.charts[0] : null;
                 if (chartData) {
+                    const chartBox = document.querySelector('.chart-box-lg');
+                    if (chartBox) {
+                        chartBox.style.opacity = chartData.is_paused ? '0.5' : '1';
+                        chartBox.style.filter = chartData.is_paused ? 'grayscale(0.8)' : 'none';
+                    }
+
                     const datasets = [];
                     let cIdx = 0;
                     for (const [key, values] of Object.entries(chartData.series || {})) {
@@ -180,6 +196,7 @@ include 'includes/header.php';
                             options: {
                                 responsive: true,
                                 maintainAspectRatio: false,
+                                animation: chartData.is_paused ? false : { duration: 300 },
                                 plugins: { legend: { labels: { color: '#f8fafc' } } },
                                 scales: {
                                     x: { ticks: { color: '#94a3b8' }, grid: { color: '#334155' } },
@@ -188,9 +205,21 @@ include 'includes/header.php';
                             }
                         });
                     } else {
+                        const currentLabelsJson = JSON.stringify(chartInstance.data.labels);
+                        const newLabelsJson = JSON.stringify(chartData.labels);
+
+                        if (chartData.is_paused && currentLabelsJson === newLabelsJson) {
+                            return;
+                        }
+
                         chartInstance.data.labels = chartData.labels;
                         chartInstance.data.datasets = datasets;
-                        chartInstance.update();
+
+                        if (chartData.is_paused) {
+                            chartInstance.update('none');
+                        } else {
+                            chartInstance.update();
+                        }
                     }
                 }
             });
@@ -217,7 +246,7 @@ include 'includes/header.php';
 
     document.addEventListener('DOMContentLoaded', () => {
         fetchSensorData();
-        setInterval(fetchSensorData, 3000);
+        setInterval(fetchSensorData, refreshInterval);
     });
 </script>
 

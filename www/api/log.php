@@ -8,8 +8,19 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     exit;
 }
 
-// 1. Bearer Token Extraction
+// 1. Bearer Token Extraction (mit Fallback für Apache HTTP Header Stripping)
 $authHeader = $_SERVER['HTTP_AUTHORIZATION'] ?? $_SERVER['REDIRECT_HTTP_AUTHORIZATION'] ?? '';
+
+if (empty($authHeader) && function_exists('getallheaders')) {
+    $headers = getallheaders();
+    foreach ($headers as $name => $value) {
+        if (strtolower($name) === 'authorization') {
+            $authHeader = $value;
+            break;
+        }
+    }
+}
+
 if (!preg_match('/Bearer\s+(\S+)/i', $authHeader, $matches)) {
     http_response_code(401);
     echo json_encode(['error' => 'Fehlender oder ungültiger Authorization Bearer Header']);
@@ -19,14 +30,20 @@ $token = $matches[1];
 
 $pdo = getDBConnection();
 
-// 2. Device Lookup by Token
-$stmt = $pdo->prepare("SELECT id, device_name, threshold_config FROM devices WHERE api_token = :token");
+// 2. Device Lookup by Token & Pause Verification
+$stmt = $pdo->prepare("SELECT id, device_name, threshold_config, is_paused FROM devices WHERE api_token = :token");
 $stmt->execute([':token' => $token]);
 $device = $stmt->fetch();
 
 if (!$device) {
     http_response_code(401);
     echo json_encode(['error' => 'Ungültiges API-Token']);
+    exit;
+}
+
+if (!empty($device['is_paused'])) {
+    http_response_code(403);
+    echo json_encode(['error' => 'Gerät ist pausiert und nimmt keine Telemetriedaten entgegen']);
     exit;
 }
 
@@ -50,7 +67,7 @@ foreach ($metrics as $metricKey => $value) {
         // Check Critical Boundary
         if ((isset($cfg['min_warn']) && $val < $cfg['min_warn']) || (isset($cfg['max_warn']) && $val > $cfg['max_warn'])) {
             $status = 'KRITISCH';
-            break; // Highest priority state
+            break;
         }
         // Check Warning Boundary
         if ((isset($cfg['min_ok']) && $val < $cfg['min_ok']) || (isset($cfg['max_ok']) && $val > $cfg['max_ok'])) {

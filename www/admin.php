@@ -62,8 +62,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($name !== '' && $type !== '' && $location !== '' && !empty($thresholdConfig)) {
             $token = 'tok_' . bin2hex(random_bytes(16));
             $stmt = $pdo->prepare("
-                INSERT INTO devices (device_name, device_type, location, api_token, threshold_config) 
-                VALUES (:name, :type, :location, :token, :config)
+                INSERT INTO devices (device_name, device_type, location, api_token, threshold_config, is_paused) 
+                VALUES (:name, :type, :location, :token, :config, 0)
             ");
             $stmt->execute([
                 ':name' => $name,
@@ -75,6 +75,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $message = "Gerät '$name' erfolgreich registriert!";
         } else {
             $error = "Bitte alle Pflichtfelder ausfüllen und mindestens ein Messfeld definieren.";
+        }
+    }
+
+    if (isset($_POST['toggle_pause'])) {
+        $deviceId = (int) ($_POST['device_id'] ?? 0);
+        if ($deviceId > 0) {
+            $stmt = $pdo->prepare("UPDATE devices SET is_paused = NOT is_paused WHERE id = :id");
+            $stmt->execute([':id' => $deviceId]);
+            $message = "Sensor-Status wurde geändert!";
         }
     }
 
@@ -218,6 +227,7 @@ include 'includes/header.php';
             <tr>
                 <th>Gerät</th>
                 <th>Standort</th>
+                <th>Status</th>
                 <th>API Bearer Token</th>
                 <th>Aktionen</th>
             </tr>
@@ -233,10 +243,25 @@ include 'includes/header.php';
                         <small class="text-muted"><?= htmlspecialchars($d['device_type']) ?></small>
                     </td>
                     <td><?= htmlspecialchars($d['location']) ?></td>
+                    <td>
+                        <?php if (!empty($d['is_paused'])): ?>
+                            <span class="badge" style="background-color: #f59e0b; color: #000;">PAUSIERT</span>
+                        <?php else: ?>
+                            <span class="badge badge-OK">AKTIV</span>
+                        <?php endif; ?>
+                    </td>
                     <td><span class="token-code"><?= htmlspecialchars($d['api_token']) ?></span></td>
                     <td>
                         <div class="flex-gap-2">
                             <a href="sensor.php?id=<?= $d['id'] ?>" class="btn btn-secondary btn-sm">Details</a>
+                            <form method="POST" style="margin: 0;">
+                                <input type="hidden" name="device_id" value="<?= $d['id'] ?>">
+                                <?php if (!empty($d['is_paused'])): ?>
+                                    <button type="submit" name="toggle_pause" class="btn btn-success btn-sm">Fortsetzen</button>
+                                <?php else: ?>
+                                    <button type="submit" name="toggle_pause" class="btn btn-warning btn-sm">Pausieren</button>
+                                <?php endif; ?>
+                            </form>
                             <form method="POST" style="margin: 0;">
                                 <input type="hidden" name="device_id" value="<?= $d['id'] ?>">
                                 <button type="submit" name="regenerate_token" class="btn btn-warning btn-sm">Token

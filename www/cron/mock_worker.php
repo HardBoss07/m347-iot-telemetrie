@@ -1,6 +1,36 @@
 <?php
 require_once __DIR__ . '/../config/db.php';
 
+/*
+ * Physik Luftfeuchtigkeit (Magnus-Formel):
+ * In einem geschlossenen Raum bleibt die Wassermenge in der Luft (Taupunkt) fast gleich.
+ * Wird es waermer, kann die Luft mehr Wasser aufnehmen -> relative Feuchtigkeit SINKT.
+ * Wird es kaelter -> relative Feuchtigkeit STEIGT. (ca. -3 % pro +1 °C bei 50 %)
+ */
+const MAGNUS_A = 17.62;
+const MAGNUS_B = 243.12;
+
+/** Taupunkt (°C) aus Temperatur und relativer Feuchtigkeit */
+function dewPoint(float $temp, float $rh): float
+{
+    $gamma = log(max($rh, 0.1) / 100.0) + (MAGNUS_A * $temp) / (MAGNUS_B + $temp);
+    return (MAGNUS_B * $gamma) / (MAGNUS_A - $gamma);
+}
+
+/** Relative Feuchtigkeit (%) aus Temperatur und Taupunkt */
+function relativeHumidity(float $temp, float $dew): float
+{
+    return 100.0 * exp((MAGNUS_A * $dew) / (MAGNUS_B + $dew) - (MAGNUS_A * $temp) / (MAGNUS_B + $temp));
+}
+
+/** Ein Schritt Random Walk: zufaellige Drift + Zug Richtung Zielwert */
+function randomWalkStep(float $lastVal, float $target, float $driftSize, float $pullStrength): float
+{
+    $drift = (mt_rand(-1000, 1000) / 1000.0) * $driftSize;
+    $pull = ($target - $lastVal) * $pullStrength;
+    return $lastVal + $drift + $pull;
+}
+
 function sendTelemetryViaApi(string $apiUrl, string $token, array $metrics): bool
 {
     $ch = curl_init($apiUrl);
@@ -88,17 +118,40 @@ function generateMockData(int $rounds = 1): int
             $lastRow = $latestStmt->fetch();
             $lastMetrics = $lastRow ? json_decode($lastRow['metrics'], true) : [];
 
+            // Temperatur zuerst berechnen, damit die Feuchtigkeit darauf reagieren kann
+            uksort($thresholdConfig, function ($a, $b) {
+                return ($b === 'temperature') <=> ($a === 'temperature');
+            });
+
             $newMetrics = [];
 
             foreach ($thresholdConfig as $metricKey => $cfg) {
-                $targetMid = (($cfg['min_ok'] ?? 20.0) + ($cfg['max_ok'] ?? 25.0)) / 2.0;
-                $lastVal = $lastMetrics[$metricKey] ?? $targetMid;
+                $targetMid = ((float) ($cfg['min_ok'] ?? 20.0) + (float) ($cfg['max_ok'] ?? 25.0)) / 2.0;
+                $lastVal = (float) ($lastMetrics[$metricKey] ?? $targetMid);
 
-                $drift = (rand(-10, 10) / 10.0);
-                $pull = ($targetMid - $lastVal) * 0.05;
-                $newVal = round($lastVal + $drift + $pull, 2);
+                if ($metricKey === 'humidity' && isset($newMetrics['temperature'], $thresholdConfig['temperature'])) {
+                    // --- Feuchtigkeit physikalisch aus Temperatur + Taupunkt ---
+                    $tCfg = $thresholdConfig['temperature'];
+                    $tMid = ((float) ($tCfg['min_ok'] ?? 20.0) + (float) ($tCfg['max_ok'] ?? 25.0)) / 2.0;
+                    $lastTemp = (float) ($lastMetrics['temperature'] ?? $tMid);
 
-                $newMetrics[$metricKey] = $newVal;
+                    // Ziel-Taupunkt: der Taupunkt, bei dem Mitte-Temperatur = Mitte-Feuchtigkeit ergibt
+                    $targetDew = dewPoint($tMid, $targetMid);
+                    // Aktueller Taupunkt aus dem letzten Messwert
+                    $lastDew = dewPoint($lastTemp, $lastVal);
+
+                    // Die Wassermenge in der Luft aendert sich nur langsam (Luefter, Tueren, Personen)
+                    $newDew = randomWalkStep($lastDew, $targetDew, 0.15, 0.05);
+
+                    // Relative Feuchtigkeit ergibt sich aus der NEUEN Temperatur und dem Taupunkt
+                    $newVal = relativeHumidity($newMetrics['temperature'], $newDew);
+                    $newVal = max(0.0, min(100.0, $newVal)); // bleibt zwischen 0 und 100 %
+                } else {
+                    // --- Normaler Random Walk (Temperatur, Spannung usw.) ---
+                    $newVal = randomWalkStep($lastVal, $targetMid, 1.0, 0.05);
+                }
+
+                $newMetrics[$metricKey] = round($newVal, 2);
             }
 
             $success = sendTelemetryViaApi($apiUrl, $device['api_token'], $newMetrics);

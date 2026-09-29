@@ -20,7 +20,12 @@ function sendTelemetryViaApi(string $apiUrl, string $token, array $metrics): boo
 
     if ($response === false) {
         $errorMsg = curl_error($ch);
-        echo sprintf("[%s] [cURL Fehler] %s (Ziel: %s)\n", date('Y-m-d H:i:s'), $errorMsg, $apiUrl);
+        $msg = sprintf("[%s] [cURL Fehler] %s (Ziel: %s)\n", date('Y-m-d H:i:s'), $errorMsg, $apiUrl);
+        if (php_sapi_name() === 'cli') {
+            echo $msg;
+        } else {
+            error_log($msg);
+        }
         curl_close($ch);
         return false;
     }
@@ -28,7 +33,12 @@ function sendTelemetryViaApi(string $apiUrl, string $token, array $metrics): boo
     curl_close($ch);
 
     if ($httpCode < 200 || $httpCode >= 300) {
-        echo sprintf("[%s] [API Fehler] HTTP %d: %s\n", date('Y-m-d H:i:s'), $httpCode, $response);
+        $msg = sprintf("[%s] [API Fehler] HTTP %d: %s\n", date('Y-m-d H:i:s'), $httpCode, $response);
+        if (php_sapi_name() === 'cli') {
+            echo $msg;
+        } else {
+            error_log($msg);
+        }
         return false;
     }
 
@@ -44,12 +54,12 @@ function generateMockData(int $rounds = 1): int
         return 0;
     }
 
-    // API-Zieladresse auflösen (im Worker-Container zeigt 'web' auf den Apache-Container)
+    // Resolve API target URL
     $apiUrl = getenv('API_URL');
     if (!$apiUrl) {
         if (isset($_SERVER['HTTP_HOST'])) {
-            $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
-            $apiUrl = $scheme . '://' . $_SERVER['HTTP_HOST'] . '/api/log.php';
+            // Inside the Apache web container, listen directly on internal port 80
+            $apiUrl = 'http://127.0.0.1/api/log.php';
         } else {
             $apiUrl = 'http://web/api/log.php';
         }

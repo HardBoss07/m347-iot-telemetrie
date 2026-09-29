@@ -23,6 +23,7 @@ Das Projekt entstand im Rahmen des ICT Moduls 347 ("Dienste mit Containern isoli
     - [Logik-Matrix der Statusbewertung:](#logik-matrix-der-statusbewertung)
   - [Background Worker \& Simulations-Algorithmus](#background-worker--simulations-algorithmus)
     - [Der Random-Walk-Formelansatz](#der-random-walk-formelansatz)
+    - [Physikalische Kopplung: Temperatur und Luftfeuchtigkeit](#physikalische-kopplung-temperatur-und-luftfeuchtigkeit)
   - [REST-API Spezifikation](#rest-api-spezifikation)
     - [1. Telemetrie Ingestion Endpoint](#1-telemetrie-ingestion-endpoint)
       - [Request Payload Beispiel:](#request-payload-beispiel)
@@ -36,18 +37,19 @@ Das Projekt entstand im Rahmen des ICT Moduls 347 ("Dienste mit Containern isoli
   - [Quick Start \& Setup-Anleitung](#quick-start--setup-anleitung)
     - [Voraussetzungen](#voraussetzungen)
     - [Step-by-Step Inbetriebnahme](#step-by-step-inbetriebnahme)
+    - [Code-Änderungen übernehmen \& Datenbank zurücksetzen](#code-änderungen-übernehmen--datenbank-zurücksetzen)
   - [Service-Übersicht \& Zugangsdaten](#service-übersicht--zugangsdaten)
   - [Projektteam](#projektteam)
 
 ## Projekt-Übersicht & Kernfunktionen
 
-Das IoT-Telemetrie-System wurde entwickelt, um eine vollständige Infrastruktur für IoT-Geräte bereitzustellen. Da in Testumgebungen oft keine physikalische Sensor-Hardware zur Verfügung steht, enthält das System einen eigenständigen Simulationsservice, der realistisch schwankende Messwerte (Temperatur, Luftfeuchtigkeit, Spannung, CO2, Luftdruck) generiert und per REST-API einspeist.
+Das IoT-Telemetrie-System wurde entwickelt, um eine vollständige Infrastruktur für IoT-Geräte bereitzustellen. Da in Testumgebungen oft keine physikalische Sensor-Hardware zur Verfügung steht, enthält das System einen eigenständigen Simulationsservice, der realistisch schwankende Messwerte generiert und per REST-API einspeist. Vorkonfiguriert sind Temperatur, Luftfeuchtigkeit und Spannung; über das Admin-Panel lassen sich beliebige weitere Metriken (z. B. CO2) anlegen.
 
 ### Hauptmerkmale:
 
 - **Multi-Container Microservice Architektur:** Vollständig isolierte Services für Webserver, Worker, Datenbank, phpMyAdmin und Portainer über Docker Compose.
 - **Dynamische Schwellenwert-Engine:** Jedes IoT-Gerät kann individuelle Schwellenwerte für beliebige Metriken definieren. Eingehende Messdaten werden serverseitig in Millisekunden analysiert und mit einem Status (`OK`, `WARNUNG`, `KRITISCH`) klassifiziert.
-- **Realistische Datensimulation:** Der Hintergrund-Worker simuliert physisches Trägheitsverhalten von Sensoren mittels kontrolliertem _Random-Walk_ inklusive Tendenz zur Mitte.
+- **Realistische Datensimulation:** Der Hintergrund-Worker simuliert physisches Trägheitsverhalten von Sensoren mittels kontrolliertem _Random-Walk_ inklusive Tendenz zur Mitte. Die Luftfeuchtigkeit wird physikalisch korrekt aus Temperatur und Taupunkt berechnet (Magnus-Formel): wird es wärmer, sinkt die relative Feuchtigkeit – wie in einem echten Raum.
 - **Interaktives Dashboard:** Live-Charts (Chart.js) mit automatischem Intervall-Polling, Multi-Kriterien-Filterung, Suche und Seitennavigation.
 - **Sensor-Steuerung:** Pause- und Reaktivierungsfunktion für einzelne Sensoren, Token-Reset, individuelle Detailseiten sowie CSV-Datenexport.
 - **Sichere API:** Token-basierte Bearer-Authentifizierung für den Ingestion-Endpoint.
@@ -107,7 +109,7 @@ graph TD
 - **`webnetz`**: Ein benutzerdefiniertes Docker-Bridge-Netzwerk, das allen Containern die aufgelöste Namenskommunikation ermöglicht (z. B. greift der Worker unter `http://web/api/log.php` auf den Webserver zu).
 - **`mysql_data`**: Persistentes Named Volume für die Datenbanktabellen.
 - **`portainer_data`**: Persistentes Volume für die Konfiguration und Logins von Portainer.
-- **Auto-Init**: Die Schema-Datei `./www/schema.sql` ist schreibgeschützt als `/docker-entrypoint-initdb.d/schema.sql` in den MySQL-Container eingebunden und führt die Ersterstellung bei jungfräulichen Datenbank-Volumen automatisch aus.
+- **Auto-Init**: Die Schema-Datei `./www/schema.sql` ist schreibgeschützt als `/docker-entrypoint-initdb.d/schema.sql` in den MySQL-Container eingebunden und führt die Ersterstellung automatisch aus, sobald das Datenbank-Volume noch leer ist (also nur beim allerersten Start).
 
 ## Projekt- und Dateistruktur
 
@@ -120,13 +122,13 @@ m347-iot-telemetrie/
 │   ├── config/
 │   │   └── db.php               # Datenbank-Verbindungsaufbau (PDO Singleton Pattern)
 │   ├── cron/
-│   │   ├── mock_worker.php      # Kern-Algorithmus für Datengenerierung & cURL Dispatch
+│   │   ├── mock_worker.php      # Simulation (Random Walk, Magnus-Formel) & cURL Dispatch
 │   │   └── runner.php           # CLI Execution Loop mit DB-Retry-Mechanismus
 │   ├── includes/
 │   │   ├── footer.php           # Globaler HTML-Footer & Urheberrechtszeile
 │   │   └── header.php           # Globaler HTML-Header, CSS Design-System & Navigation
 │   ├── admin.php                # Admin Panel: Geräteverwaltung, Token-Reset, CSV-Export
-│   ├── index.php                # Haupt-Dashboard: Live-Charts, Filtermuskete & Logs
+│   ├── index.php                # Haupt-Dashboard: Live-Charts, Filterleiste & Logs
 │   ├── login.php                # Admin Login-Maske mit bcrypt Hash-Prüfung
 │   ├── logout.php               # Session-Beendigung und Redirect
 │   ├── schema.sql               # MySQL Tabellenstruktur, DDL & Initial-Seeding
@@ -184,7 +186,7 @@ Verwaltet administrative Zugänge zum Admin-Panel.
 
 #### 2. `devices`
 
-Speichert alle registrierten IoT-Sensoren sowie deren individuellem Schwellenwert-Regelwerk im JSON-Format.
+Speichert alle registrierten IoT-Sensoren sowie deren individuelles Schwellenwert-Regelwerk im JSON-Format.
 
 - `id` (INT, Primary Key, Auto Increment)
 - `device_name` (VARCHAR(100))
@@ -208,7 +210,7 @@ Speichert alle registrierten IoT-Sensoren sowie deren individuellem Schwellenwer
     }
   }
   ```
-- `is_paused` (TINYINT(1), Default 0): Schalter zur Temporären Deaktivierung der Datenannahme.
+- `is_paused` (TINYINT(1), Default 0): Schalter zur temporären Deaktivierung der Datenannahme.
 - `created_at` (TIMESTAMP)
 
 #### 3. `telemetry_data`
@@ -269,13 +271,13 @@ flowchart TD
 
 ### Logik-Matrix der Statusbewertung:
 
-1. **KRITISCH**: Sobald ein einziger Messwert die äußeren Grenzen (`min_warn` unterschritten ODER `max_warn` überschritten) verlässt, wird der Eintrag unverzüglich als `KRITISCH` eingestuft. Die Prüfung stopt vorzeitig.
-2. **WARNUNG**: Befinden sich alle Werte innerhalb des Warnbereichs, aber mindestens ein Wert außerhalb des idealen Zielbereichs (`min_ok` bis `max_ok`), erhält der Datensatz das Prädikat `WARNUNG`.
+1. **KRITISCH**: Sobald ein einziger Messwert die äusseren Grenzen (`min_warn` unterschritten ODER `max_warn` überschritten) verlässt, wird der Eintrag unverzüglich als `KRITISCH` eingestuft. Die Prüfung stoppt vorzeitig.
+2. **WARNUNG**: Befinden sich alle Werte innerhalb des Warnbereichs, aber mindestens ein Wert ausserhalb des idealen Zielbereichs (`min_ok` bis `max_ok`), erhält der Datensatz das Prädikat `WARNUNG`.
 3. **OK**: Alle gesendeten Messwerte liegen exakt im definierten Idealbereich.
 
 ## Background Worker & Simulations-Algorithmus
 
-Um reale physikalische Umgebungssensoren zu simulieren, erzeugt die Klasse/Funktionssammlung in `www/cron/mock_worker.php` kontinuierlich Messreihen ohne abrupte Wertesprünge.
+Um reale physikalische Umgebungssensoren zu simulieren, erzeugen die Funktionen in `www/cron/mock_worker.php` kontinuierlich Messreihen ohne abrupte Wertesprünge.
 
 ```mermaid
 sequenceDiagram
@@ -297,7 +299,7 @@ sequenceDiagram
             Worker->>DB: SELECT metrics FROM telemetry_data ORDER BY recorded_at DESC LIMIT 1
             DB-->>Worker: Letzter bekannter Messwertsatz
 
-            note over Worker: Random-Walk Berechnung:<br/>drift = rand(-10, 10) / 10.0<br/>pull = (targetMid - lastVal) * 0.05<br/>newVal = round(lastVal + drift + pull, 2)
+            note over Worker: 1. Temperatur & übrige Metriken: Random Walk<br/>newVal = lastVal + drift + (targetMid - lastVal) * 0.05<br/>2. Luftfeuchtigkeit: Taupunkt per Random Walk,<br/>rel. Feuchtigkeit per Magnus-Formel aus neuer Temperatur
 
             Worker->>WebAPI: cURL HTTP POST /api/log.php (Header: Bearer Token, Body: JSON)
             WebAPI-->>Worker: HTTP 200 OK Response
@@ -313,11 +315,35 @@ sequenceDiagram
 Statt reine Zufallswerte im Bereich Min-Max zu würfeln, berechnet der Worker den Folge-Messwert $V_{neu}$ aus dem vorherigen Messwert $V_{alt}$:
 
 1. **Zielwert-Mitte**: $M = \frac{\text{min\_ok} + \text{max\_ok}}{2}$
-2. **Zufällige Driftung**: $D \in [-1.0, +1.0]$
+2. **Zufällige Drift**: $D \in [-1.0, +1.0]$ (gleichverteilt, Funktion `randomWalkStep()`)
 3. **Rückzugskraft zur Mitte (Tendenz)**: $P = (M - V_{alt}) \cdot 0.05$
 4. **Neuer Messwert**: $V_{neu} = \text{round}(V_{alt} + D + P, 2)$
 
 Durch die Rückzugskraft $P$ driftet der Sensor natürlich um den Sollwert herum und erzeugt sporadisch - aber realistisch - Warnungen oder kritische Spitzen, ohne unkontrolliert ins Unendliche abzuweichen.
+
+Dieser Ansatz gilt für die Temperatur und alle weiteren Metriken (z. B. Spannung). Die Luftfeuchtigkeit wird gesondert berechnet (siehe nächster Abschnitt).
+
+### Physikalische Kopplung: Temperatur und Luftfeuchtigkeit
+
+Würden Temperatur und Luftfeuchtigkeit unabhängig voneinander simuliert, entstünden unrealistische Kombinationen. In einem geschlossenen Raum bleibt die absolute Wassermenge in der Luft (ausgedrückt durch den **Taupunkt** $T_d$) nahezu konstant. Warme Luft kann jedoch mehr Wasser aufnehmen – deshalb gilt:
+
+- **wärmer → relative Luftfeuchtigkeit sinkt**
+- **kälter → relative Luftfeuchtigkeit steigt**
+
+(bei ca. 50 % rel. Feuchtigkeit rund −3 Prozentpunkte pro +1 °C)
+
+Besitzt ein Gerät sowohl `temperature` als auch `humidity`, berechnet der Worker pro Durchlauf:
+
+1. **Temperatur zuerst** (normaler Random Walk), damit die Feuchtigkeit auf den neuen Wert reagieren kann.
+2. **Taupunkt aus dem letzten Messwert** mit der Magnus-Formel ($a = 17.62$, $b = 243.12\,°C$):
+   $$\gamma = \ln\left(\frac{RH}{100}\right) + \frac{a \cdot T}{b + T} \qquad T_d = \frac{b \cdot \gamma}{a - \gamma}$$
+3. **Taupunkt ändert sich nur langsam** (Random Walk mit Drift $\pm 0.15\,°C$ und Zug zum Ziel-Taupunkt, der sich aus der Mitte der OK-Bereiche von Temperatur und Feuchtigkeit ergibt) – simuliert Lüftung, Türen oder Personen im Raum.
+4. **Neue relative Feuchtigkeit** aus neuer Temperatur und neuem Taupunkt, begrenzt auf 0–100 %:
+   $$RH = 100 \cdot \exp\left(\frac{a \cdot T_d}{b + T_d} - \frac{a \cdot T}{b + T}\right)$$
+
+Ein Test mit 2000 Durchläufen ergab eine Korrelation von ≈ −0.98 zwischen Temperatur und Luftfeuchtigkeit bei weiterhin realistischen Werten (ca. 35–75 %).
+
+Umgesetzt in `www/cron/mock_worker.php` über die Funktionen `dewPoint()`, `relativeHumidity()` und `randomWalkStep()`.
 
 ## REST-API Spezifikation
 
@@ -402,7 +428,7 @@ Durch die Rückzugskraft $P$ driftet der Sensor natürlich um den Sollwert herum
 
 ## Web-Dashboard & Administrative Funktionen
 
-Das Frontend ist ohne schwere Frameworks mit nativen JavaScript (ES6+), Chart.js und modernem HTML5/CSS3 CSS-Variablen-Styling aufgebaut.
+Das Frontend ist ohne schwere Frameworks mit nativem JavaScript (ES6+), Chart.js sowie HTML5/CSS3 mit CSS-Variablen aufgebaut.
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
@@ -428,7 +454,7 @@ Das Frontend ist ohne schwere Frameworks mit nativen JavaScript (ES6+), Chart.js
 
 ### Key UI Features:
 
-1. **Dynamic Dashboard Polling:** Das Dashboard ermittelt das Aktualisierungsintervall automatisch aus der Umgebungsvariable `GENERATOR_INTERVAL` und aktualisiert Tabellen und Charts ohne kompletten Reload.
+1. **Dynamic Dashboard Polling:** Das Dashboard liest das Aktualisierungsintervall aus der Umgebungsvariable `GENERATOR_INTERVAL` (Fallback: 5 Sekunden) und aktualisiert Tabellen und Charts ohne kompletten Reload. Hinweis: Die Variable ist aktuell nur im `worker`-Container gesetzt; das Dashboard nutzt daher den Fallback. Wird das Intervall geändert, muss es auch beim `web`-Service eingetragen werden.
 2. **Optische Status-Indikatoren:** Pausierte Sensoren werden in den Charts ausgegraut (Graustufen-Filter + Transparenz) und mit einem auffälligen Badge gekennzeichnet.
 3. **Sensor Detailansicht (`sensor.php`):** Zeigt eine hochauflösende Zeitreihe des einzelnen Sensors, eine Übersicht aller hinterlegten Schwellenwerte und bietet einen direkten CSV-Download.
 4. **Admin Panel (`admin.php`):**
@@ -443,13 +469,15 @@ Das Frontend ist ohne schwere Frameworks mit nativen JavaScript (ES6+), Chart.js
    - Zugriff nur mit gültigem `Authorization: Bearer <api_token>`.
    - Verhindert das Einschleusen von Messdaten durch unbefugte Dritte.
 2. **Admin-Session-Schutz**:
-   - Die Verwaltungsseiten `admin.php` sind durch serverseitige PHP-Sessions (`$_SESSION['user_id']`) geschützt. Unangemeldete Aufrufe werden zu `login.php` umgeleitet.
+   - Die Verwaltungsseite `admin.php` ist durch serverseitige PHP-Sessions (`$_SESSION['user_id']`) geschützt. Unangemeldete Aufrufe werden zu `login.php` umgeleitet.
 3. **Passwort-Hashing**:
    - Passwörter werden niemals im Klartext gespeichert. Die Authentifizierung nutzt `password_hash()` und `password_verify()` mit dem Standard-Algorithmus `BCRYPT`.
 4. **SQL-Injection Prevention**:
    - Sämtliche Datenbankzugriffe erfolgen konsequent über PDO Prepared Statements mit gebundenen Parametern.
 5. **XSS-Schutz**:
    - Alle Benutzereingaben und Datenbanksatzausgaben im HTML-Kontext werden mittels `htmlspecialchars()` maskiert.
+6. **Hinweis Standard-Zugangsdaten**:
+   - Die Zugangsdaten (`admin`/`admin`, `meinuser`/`meinpasswort`, `rootpasswort`) sowie die Seed-Tokens sind nur für die lokale Entwicklungs- und Testumgebung gedacht und müssen vor einem produktiven Einsatz geändert werden.
 
 ## Quick Start & Setup-Anleitung
 
@@ -482,6 +510,18 @@ Das Frontend ist ohne schwere Frameworks mit nativen JavaScript (ES6+), Chart.js
 4. **Anwendung im Browser öffnen:**
    - Dashboard: [http://localhost:8080](http://localhost:8080)
    - Admin-Bereich: [http://localhost:8080/admin.php](http://localhost:8080/admin.php)
+
+   _Das Datenbank-Schema inkl. Admin-Benutzer und drei Beispielgeräten wird beim ersten Start automatisch importiert – ein manueller Import über phpMyAdmin ist nicht nötig. Der Worker beginnt sofort, alle 5 Sekunden Messwerte zu senden._
+
+### Code-Änderungen übernehmen & Datenbank zurücksetzen
+
+| Situation                                      | Befehl                                               |
+| ---------------------------------------------- | ---------------------------------------------------- |
+| Neuen Stand von GitHub holen                   | `git pull`                                           |
+| PHP-Seiten geändert (`index.php`, `api/` usw.) | Kein Neustart nötig (Ordner `www` ist gemountet)     |
+| Worker-Code geändert (`cron/`)                 | `docker compose restart worker`                      |
+| `Dockerfile` oder `docker-compose.yml` geändert | `docker compose up -d --build`                       |
+| `schema.sql` geändert / DB komplett neu        | `docker compose down -v` und danach `docker compose up -d --build` (**löscht alle Messdaten**) |
 
 ## Service-Übersicht & Zugangsdaten
 
